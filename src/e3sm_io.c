@@ -228,9 +228,12 @@ int main (int argc, char **argv) {
 
     MPI_Comm_rank (MPI_COMM_WORLD, &(cfg.rank));
     MPI_Comm_size (MPI_COMM_WORLD, &(cfg.np));
-
+    MPI_Info info = MPI_INFO_NULL;
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "romio_cb_write", "enable");
     cfg.io_comm        = MPI_COMM_WORLD;
-    cfg.info           = MPI_INFO_NULL;
+    // cfg.info           = MPI_INFO_NULL;
+    cfg.info           = info;
     cfg.num_iotasks    = cfg.np;
     cfg.num_subfiles   = 0;
     cfg.out_path[0]    = '\0';
