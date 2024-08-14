@@ -84,6 +84,9 @@ static inline int set_info (e3sm_io_config *cfg, e3sm_io_decom *decom) {
     /* collective write */
     err = MPI_Info_set (cfg->info, "romio_cb_write", "enable");
     CHECK_MPIERR
+    /*ds_wr_lb*/
+    err = MPI_Info_set(cfg->info, "romio_ds_wr_lb", "100000");
+    CHECK_MPIERR
 
     /* HDF5 may do independent I/O internally */
 
@@ -228,12 +231,9 @@ int main (int argc, char **argv) {
 
     MPI_Comm_rank (MPI_COMM_WORLD, &(cfg.rank));
     MPI_Comm_size (MPI_COMM_WORLD, &(cfg.np));
-    MPI_Info info = MPI_INFO_NULL;
-    MPI_Info_create(&info);
-    MPI_Info_set(info, "romio_cb_write", "enable");
+    
     cfg.io_comm        = MPI_COMM_WORLD;
-    // cfg.info           = MPI_INFO_NULL;
-    cfg.info           = info;
+    cfg.info           = MPI_INFO_NULL;
     cfg.num_iotasks    = cfg.np;
     cfg.num_subfiles   = 0;
     cfg.out_path[0]    = '\0';
