@@ -172,6 +172,8 @@ typedef struct e3sm_io_config {
     char *env_log_info;
     int   env_cache;
     int   env_async;
+    /*below are used for cuda-aware romio test*/
+    int   write_buf_gpu;
 } e3sm_io_config;
 
 

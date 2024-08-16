@@ -56,6 +56,7 @@ int e3sm_io_case::wr_test(e3sm_io_config &cfg,
         }
 
         cfg.nvars = cmeta->nvars;
+
         err = var_wr_case(cfg, decom, driver, cmeta);
         CHECK_ERR
 

@@ -24,9 +24,10 @@ extern "C" int e3sm_io_core (e3sm_io_config *cfg, e3sm_io_decom *decom) {
     int err=0;
     e3sm_io_case *tcase    = NULL;
     e3sm_io_driver *driver = NULL;
-
+    
     E3SM_IO_TIMER_START (E3SM_IO_TIMER_TOTAL)
     E3SM_IO_TIMER_START (E3SM_IO_TIMER_CORE)
+
 
     /* Select test case */
     E3SM_IO_TIMER_START (E3SM_IO_TIMER_INIT_CASE)
@@ -89,6 +90,7 @@ extern "C" int e3sm_io_core (e3sm_io_config *cfg, e3sm_io_decom *decom) {
 
     /* perform write */
     if (cfg->wr) {
+
         E3SM_IO_TIMER_START (E3SM_IO_TIMER_INIT_DRIVER)
         driver = e3sm_io_get_driver (NULL, cfg);
         CHECK_PTR (driver)

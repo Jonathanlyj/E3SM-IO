@@ -22,12 +22,32 @@
 #include <e3sm_io_err.h>
 #include <e3sm_io_case.hpp>
 #include <e3sm_io_driver.hpp>
+#include <cuda_runtime.h>
 
 #ifdef ENABLE_ADIOS2
 #include <e3sm_io_driver_adios2.hpp>
 #endif
 
 #define VAR_ITYPE REC_ITYPE
+
+void check_memory_type(void *ptr, const char *name) {
+    cudaPointerAttributes attributes;
+    cudaError_t err = cudaPointerGetAttributes(&attributes, ptr);
+    if (err != cudaSuccess) {
+        printf("Failed to get pointer attributes for %s: %s\n", name, cudaGetErrorString(err));
+        return;
+    }
+    
+    if (attributes.type == cudaMemoryTypeDevice) {
+        printf("%s is in device memory\n", name);
+    } else if (attributes.type == cudaMemoryTypeHost) {
+        printf("%s is in host memory\n", name);
+    } else if (attributes.type == cudaMemoryTypeManaged) {
+        printf("%s is in managed memory\n", name);
+    } else {
+        printf("%s is in unregistered memory\n", name);
+    }
+}
 
 #define FILE_CREATE(filename) {                                               \
     err = driver.create(filename, comm, cfg.info, &ncid);                     \
@@ -95,6 +115,7 @@
 
 #define FIX_VAR_IPUT(varp, dp, itype, buf) {                                  \
 /* printf("FIX varp.vid=%d ndims=%d dp=%d nreqs=%d itype=%d name=%s\n",varp.vid,varp.ndims,dp, decom.contig_nreqs[dp],itype,varp._name); */ \
+    check_memory_type(buf, "buf_in_FIX_VAR_IPUT");                                       \
     if (((cfg.strategy == canonical) || (cfg.strategy == log))) {             \
         err = driver.put_varn(ncid, varp.vid, itype, decom.contig_nreqs[dp],  \
                               decom.w_startx[dp], decom.w_countx[dp], buf,nb);\
@@ -215,6 +236,7 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
     wr_buf_init(gap);
 
     /* define dimensions, variables, and attributes */
+
     if (cfg.run_case == F)
         err = def_F_case(cfg, decom, driver, ncid);
     else if (cfg.run_case == G)
@@ -239,6 +261,7 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
     timing = MPI_Wtime();
 
     /* allocate write buffers */
+
     wr_buf_malloc(cfg, cmeta->ffreq);
 
     nvars_D = cmeta->nvars_D;

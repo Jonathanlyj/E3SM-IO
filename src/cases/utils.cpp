@@ -20,6 +20,32 @@
 #include <e3sm_io_case.hpp>
 #include <e3sm_io_driver.hpp>
 
+#include <cuda_runtime.h>
+#define CUDA_CHECK_ERROR(err) { if(err != cudaSuccess) { printf("\ncuda error: %s\n", cudaGetErrorString(err)); }}
+
+
+
+
+// Function to check if a pointer is pointing to device memory
+void check_memory_type(void *ptr, const char *name, int rank) {
+    cudaPointerAttributes attributes;
+    cudaError_t err = cudaPointerGetAttributes(&attributes, ptr);
+    if (err != cudaSuccess) {
+        printf("rank %d: Failed to get pointer attributes for %s: %s\n", rank, name, cudaGetErrorString(err));
+        return;
+    }
+    
+    if (attributes.type == cudaMemoryTypeDevice) {
+        printf("rank %d: %s is in device memory\n", rank, name);
+    } else if (attributes.type == cudaMemoryTypeHost) {
+        printf("rank %d: %s is in host memory\n", rank, name);
+    } else if (attributes.type == cudaMemoryTypeManaged) {
+        printf("rank %d: %s is in managed memory\n", rank, name);
+    } else {
+        printf("rank %d: %s is in unregistered memory\n", rank, name);
+    }
+}
+
 /*----< check_malloc() >-----------------------------------------------------*/
 int e3sm_io_case::check_malloc(e3sm_io_config *cfg,
                                e3sm_io_driver *driver)
@@ -85,9 +111,10 @@ int e3sm_io_case::wr_buf_malloc(e3sm_io_config &cfg, int ffreq)
 {
     int rank;
     size_t j;
+    size_t sum;
 
     MPI_Comm_rank(cfg.io_comm, &rank);
-
+    
     if (cfg.api == adios) {
         wr_buf.fix_txt_buflen += 64;
         wr_buf.fix_int_buflen += 64;
@@ -114,9 +141,10 @@ int e3sm_io_case::wr_buf_malloc(e3sm_io_config &cfg, int ffreq)
         wr_buf.rec_dbl_buflen *= ffreq;
         wr_buf.rec_lld_buflen *= ffreq;
     }
-
+    
     /* allocate and initialize write buffers */
     if (cfg.non_contig_buf) {
+
         wr_buf.fix_txt_buf = (char*)   malloc(wr_buf.fix_txt_buflen * sizeof(char));
         wr_buf.fix_int_buf = (int*)    malloc(wr_buf.fix_int_buflen * sizeof(int));
         wr_buf.fix_flt_buf = (float*)  malloc(wr_buf.fix_flt_buflen * sizeof(float));
@@ -129,16 +157,17 @@ int e3sm_io_case::wr_buf_malloc(e3sm_io_config &cfg, int ffreq)
         wr_buf.rec_lld_buf = (long long*) malloc(wr_buf.rec_lld_buflen * sizeof(long long));
     }
     else {
-        size_t sum = wr_buf.fix_txt_buflen
-                   + wr_buf.fix_int_buflen * sizeof(int)
-                   + wr_buf.fix_dbl_buflen * sizeof(double)
-                   + wr_buf.fix_flt_buflen * sizeof(float)
-                   + wr_buf.fix_lld_buflen * sizeof(long long)
-                   + wr_buf.rec_txt_buflen
-                   + wr_buf.rec_int_buflen * sizeof(int)
-                   + wr_buf.rec_dbl_buflen * sizeof(double)
-                   + wr_buf.rec_flt_buflen * sizeof(float)
-                   + wr_buf.rec_lld_buflen * sizeof(long long);
+
+        sum = wr_buf.fix_txt_buflen
+            + wr_buf.fix_int_buflen * sizeof(int)
+            + wr_buf.fix_dbl_buflen * sizeof(double)
+            + wr_buf.fix_flt_buflen * sizeof(float)
+            + wr_buf.fix_lld_buflen * sizeof(long long)
+            + wr_buf.rec_txt_buflen
+            + wr_buf.rec_int_buflen * sizeof(int)
+            + wr_buf.rec_dbl_buflen * sizeof(double)
+            + wr_buf.rec_flt_buflen * sizeof(float)
+            + wr_buf.rec_lld_buflen * sizeof(long long);
 
         wr_buf.fix_txt_buf = (char*) malloc(sum);
         wr_buf.fix_int_buf = (int*)      (wr_buf.fix_txt_buf + wr_buf.fix_txt_buflen);
@@ -163,28 +192,145 @@ int e3sm_io_case::wr_buf_malloc(e3sm_io_config &cfg, int ffreq)
     for (j=0; j<wr_buf.rec_dbl_buflen; j++) wr_buf.rec_dbl_buf[j] = rank;
     for (j=0; j<wr_buf.rec_flt_buflen; j++) wr_buf.rec_flt_buf[j] = rank;
     for (j=0; j<wr_buf.rec_lld_buflen; j++) wr_buf.rec_lld_buf[j] = rank;
+    // printf("rank %d: cfg.write_buf_gpu: %d\n", rank, cfg.write_buf_gpu);
+    
+    if (cfg.write_buf_gpu) {
+        printf("rank %d: write_buf_gpu is called\n", rank);
+        char *d_fix_txt_buf, *d_rec_txt_buf;
+        int *d_fix_int_buf, *d_rec_int_buf;
+        float *d_fix_flt_buf, *d_rec_flt_buf;
+        double *d_fix_dbl_buf, *d_rec_dbl_buf;
+        long long *d_fix_lld_buf, *d_rec_lld_buf;
 
+
+        if (cfg.non_contig_buf) {
+            // Allocate device memory
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_fix_txt_buf, wr_buf.fix_txt_buflen * sizeof(char)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_rec_txt_buf, wr_buf.rec_txt_buflen * sizeof(char)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_fix_int_buf, wr_buf.fix_int_buflen * sizeof(int)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_rec_int_buf, wr_buf.rec_int_buflen * sizeof(int)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_fix_flt_buf, wr_buf.fix_flt_buflen * sizeof(float)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_rec_flt_buf, wr_buf.rec_flt_buflen * sizeof(float)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_fix_dbl_buf, wr_buf.fix_dbl_buflen * sizeof(double)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_rec_dbl_buf, wr_buf.rec_dbl_buflen * sizeof(double)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_fix_lld_buf, wr_buf.fix_lld_buflen * sizeof(long long)));
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_rec_lld_buf, wr_buf.rec_lld_buflen * sizeof(long long)));
+
+            CUDA_CHECK_ERROR(cudaMemcpy(d_fix_txt_buf, wr_buf.fix_txt_buf, wr_buf.fix_txt_buflen * sizeof(char), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_fix_int_buf, wr_buf.fix_int_buf, wr_buf.fix_int_buflen * sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_fix_flt_buf, wr_buf.fix_flt_buf, wr_buf.fix_flt_buflen * sizeof(float), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_fix_dbl_buf, wr_buf.fix_dbl_buf, wr_buf.fix_dbl_buflen * sizeof(double), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_fix_lld_buf, wr_buf.fix_lld_buf, wr_buf.fix_lld_buflen * sizeof(long long), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_rec_txt_buf, wr_buf.rec_txt_buf, wr_buf.rec_txt_buflen * sizeof(char), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_rec_int_buf, wr_buf.rec_int_buf, wr_buf.rec_int_buflen * sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_rec_flt_buf, wr_buf.rec_flt_buf, wr_buf.rec_flt_buflen * sizeof(float), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_rec_dbl_buf, wr_buf.rec_dbl_buf, wr_buf.rec_dbl_buflen * sizeof(double), cudaMemcpyHostToDevice));
+            CUDA_CHECK_ERROR(cudaMemcpy(d_rec_lld_buf, wr_buf.rec_lld_buf, wr_buf.rec_lld_buflen * sizeof(long long), cudaMemcpyHostToDevice));
+
+            // Free the original host memory buffers
+            if (wr_buf.fix_txt_buf != NULL) free(wr_buf.fix_txt_buf);
+            if (wr_buf.fix_int_buf != NULL) free(wr_buf.fix_int_buf);
+            if (wr_buf.fix_flt_buf != NULL) free(wr_buf.fix_flt_buf);
+            if (wr_buf.fix_dbl_buf != NULL) free(wr_buf.fix_dbl_buf);
+            if (wr_buf.fix_lld_buf != NULL) free(wr_buf.fix_lld_buf);
+            if (wr_buf.rec_txt_buf != NULL) free(wr_buf.rec_txt_buf);
+            if (wr_buf.rec_int_buf != NULL) free(wr_buf.rec_int_buf);
+            if (wr_buf.rec_flt_buf != NULL) free(wr_buf.rec_flt_buf);
+            if (wr_buf.rec_dbl_buf != NULL) free(wr_buf.rec_dbl_buf);
+            if (wr_buf.rec_lld_buf != NULL) free(wr_buf.rec_lld_buf);
+
+        } else {
+            CUDA_CHECK_ERROR(cudaMalloc((void**)&d_fix_txt_buf, sum));
+            d_fix_int_buf = (int*)      (d_fix_txt_buf + wr_buf.fix_txt_buflen);
+            d_fix_dbl_buf = (double*)   (d_fix_int_buf + wr_buf.fix_int_buflen);
+            d_fix_flt_buf = (float*)    (d_fix_dbl_buf + wr_buf.fix_dbl_buflen);
+            d_fix_lld_buf = (long long*)(d_fix_flt_buf + wr_buf.fix_flt_buflen);
+
+            d_rec_txt_buf = (char*)     (d_fix_lld_buf + wr_buf.fix_lld_buflen);
+            d_rec_int_buf = (int*)      (d_rec_txt_buf + wr_buf.rec_txt_buflen);
+            d_rec_dbl_buf = (double*)   (d_rec_int_buf + wr_buf.rec_int_buflen);
+            d_rec_flt_buf = (float*)    (d_rec_dbl_buf + wr_buf.rec_dbl_buflen);
+            d_rec_lld_buf = (long long*)(d_rec_flt_buf + wr_buf.rec_flt_buflen);
+
+        }
+        wr_buf.fix_txt_buf = d_fix_txt_buf;
+        wr_buf.fix_int_buf = d_fix_int_buf;
+        wr_buf.fix_flt_buf = d_fix_flt_buf;
+        wr_buf.fix_dbl_buf = d_fix_dbl_buf;
+        wr_buf.fix_lld_buf = d_fix_lld_buf;
+        wr_buf.rec_txt_buf = d_rec_txt_buf;
+        wr_buf.rec_int_buf = d_rec_int_buf;
+        wr_buf.rec_flt_buf = d_rec_flt_buf;
+        wr_buf.rec_dbl_buf = d_rec_dbl_buf;
+        wr_buf.rec_lld_buf = d_rec_lld_buf;
+        // Check each buffer
+
+
+        // if (rank==0){
+        //     printf("fix_txt_buflen: %zu\n", wr_buf.fix_txt_buflen);
+        //     printf("fix_int_buflen: %zu\n", wr_buf.fix_int_buflen);
+        //     printf("fix_flt_buflen: %zu\n", wr_buf.fix_flt_buflen);
+        //     printf("fix_dbl_buflen: %zu\n", wr_buf.fix_dbl_buflen);
+        //     printf("fix_lld_buflen: %zu\n", wr_buf.fix_lld_buflen);
+        //     printf("rec_txt_buflen: %zu\n", wr_buf.rec_txt_buflen);
+        //     printf("rec_int_buflen: %zu\n", wr_buf.rec_int_buflen);
+        //     printf("rec_flt_buflen: %zu\n", wr_buf.rec_flt_buflen);
+        //     printf("rec_dbl_buflen: %zu\n", wr_buf.rec_dbl_buflen);
+        //     printf("rec_lld_buflen: %zu\n", wr_buf.rec_lld_buflen);
+        //     check_memory_type(d_fix_txt_buf, "d_fix_txt_buf", rank);
+        //     check_memory_type(d_fix_int_buf, "d_fix_int_buf", rank);
+        //     check_memory_type(d_fix_flt_buf, "d_fix_flt_buf", rank);
+        //     check_memory_type(d_fix_dbl_buf, "d_fix_dbl_buf", rank);
+        //     check_memory_type(d_fix_lld_buf, "d_fix_lld_buf", rank);
+        //     check_memory_type(d_rec_txt_buf, "d_rec_txt_buf", rank);
+        //     check_memory_type(d_rec_int_buf, "d_rec_int_buf", rank);
+        //     check_memory_type(d_rec_flt_buf, "d_rec_flt_buf", rank);
+        //     check_memory_type(d_rec_dbl_buf, "d_rec_dbl_buf", rank);
+        //     check_memory_type(d_rec_lld_buf, "d_rec_lld_buf", rank);
+        // }
+    }
+
+
+    printf("\nwr_buf.fix_txt_buf in e3sm: %p", wr_buf.fix_txt_buf);
     return 0;
 }
 
 /*----< wr_buf_free() >------------------------------------------------------*/
 void e3sm_io_case::wr_buf_free(e3sm_io_config &cfg)
 {
-    if (cfg.non_contig_buf) {
-        if (wr_buf.fix_txt_buf != NULL) free(wr_buf.fix_txt_buf);
-        if (wr_buf.fix_int_buf != NULL) free(wr_buf.fix_int_buf);
-        if (wr_buf.fix_flt_buf != NULL) free(wr_buf.fix_flt_buf);
-        if (wr_buf.fix_dbl_buf != NULL) free(wr_buf.fix_dbl_buf);
-        if (wr_buf.fix_lld_buf != NULL) free(wr_buf.fix_lld_buf);
-        if (wr_buf.rec_txt_buf != NULL) free(wr_buf.rec_txt_buf);
-        if (wr_buf.rec_int_buf != NULL) free(wr_buf.rec_int_buf);
-        if (wr_buf.rec_flt_buf != NULL) free(wr_buf.rec_flt_buf);
-        if (wr_buf.rec_dbl_buf != NULL) free(wr_buf.rec_dbl_buf);
-        if (wr_buf.rec_lld_buf != NULL) free(wr_buf.rec_lld_buf);
+    if (cfg.write_buf_gpu == 1) {
+        if (cfg.non_contig_buf) {
+            if (wr_buf.fix_txt_buf != NULL) cudaFree(wr_buf.fix_txt_buf);
+            if (wr_buf.fix_int_buf != NULL) cudaFree(wr_buf.fix_int_buf);
+            if (wr_buf.fix_flt_buf != NULL) cudaFree(wr_buf.fix_flt_buf);
+            if (wr_buf.fix_dbl_buf != NULL) cudaFree(wr_buf.fix_dbl_buf);
+            if (wr_buf.fix_lld_buf != NULL) cudaFree(wr_buf.fix_lld_buf);
+            if (wr_buf.rec_txt_buf != NULL) cudaFree(wr_buf.rec_txt_buf);
+            if (wr_buf.rec_int_buf != NULL) cudaFree(wr_buf.rec_int_buf);
+            if (wr_buf.rec_flt_buf != NULL) cudaFree(wr_buf.rec_flt_buf);
+            if (wr_buf.rec_dbl_buf != NULL) cudaFree(wr_buf.rec_dbl_buf);
+            if (wr_buf.rec_lld_buf != NULL) cudaFree(wr_buf.rec_lld_buf);
+        } else {
+            if (wr_buf.fix_txt_buf != NULL) cudaFree(wr_buf.fix_txt_buf);
+        }
+    } else {
+        if (cfg.non_contig_buf) {
+            if (wr_buf.fix_txt_buf != NULL) free(wr_buf.fix_txt_buf);
+            if (wr_buf.fix_int_buf != NULL) free(wr_buf.fix_int_buf);
+            if (wr_buf.fix_flt_buf != NULL) free(wr_buf.fix_flt_buf);
+            if (wr_buf.fix_dbl_buf != NULL) free(wr_buf.fix_dbl_buf);
+            if (wr_buf.fix_lld_buf != NULL) free(wr_buf.fix_lld_buf);
+            if (wr_buf.rec_txt_buf != NULL) free(wr_buf.rec_txt_buf);
+            if (wr_buf.rec_int_buf != NULL) free(wr_buf.rec_int_buf);
+            if (wr_buf.rec_flt_buf != NULL) free(wr_buf.rec_flt_buf);
+            if (wr_buf.rec_dbl_buf != NULL) free(wr_buf.rec_dbl_buf);
+            if (wr_buf.rec_lld_buf != NULL) free(wr_buf.rec_lld_buf);
+        } else {
+            if (wr_buf.fix_txt_buf != NULL) free(wr_buf.fix_txt_buf);
+        }
     }
-    else {
-        if (wr_buf.fix_txt_buf != NULL) free(wr_buf.fix_txt_buf);
-    }
+
+
 
     wr_buf.fix_txt_buf = NULL;
     wr_buf.fix_int_buf = NULL;
@@ -207,5 +353,7 @@ void e3sm_io_case::wr_buf_free(e3sm_io_config &cfg)
     wr_buf.rec_flt_buflen = 0;
     wr_buf.rec_dbl_buflen = 0;
     wr_buf.rec_lld_buflen = 0;
+
+    
 }
 

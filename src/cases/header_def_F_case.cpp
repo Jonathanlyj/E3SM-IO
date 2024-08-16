@@ -478,6 +478,8 @@ int e3sm_io_case::def_F_case(e3sm_io_config &cfg,
     PUT_ATTR_TXT("long_name", "total solar irradiance")
     PUT_ATTR_TXT("units", "W/m2")
 
+
+
     /* below 384 are record climate variables of type float ----------------*/
 
 if (cfg.hist == h0) {

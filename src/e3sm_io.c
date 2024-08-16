@@ -19,7 +19,7 @@
 
 #include <e3sm_io.h>
 #include <e3sm_io_err.h>
-
+#include <cuda_runtime.h>
 #ifdef E3SM_IO_PROFILING
 #include <e3sm_io_profile.hpp>
 #endif
@@ -260,6 +260,8 @@ int main (int argc, char **argv) {
     cfg.xtype          = NC_DOUBLE;
     cfg.sort_reqs      = 1;
     cfg.isReqSorted    = 0;
+    //turn on gpu device buffer as write buffer
+    cfg.write_buf_gpu  = 1;
 
     for (i = 0; i < MAX_NUM_DECOMP; i++) {
         cfg.G_case.nvars_D[i]    = 0;
@@ -280,6 +282,10 @@ int main (int argc, char **argv) {
         decom.w_starts[i]    = NULL;
     }
     ffreq = 1;
+    //LEIA only: device 0 is busy
+    if (cfg.write_buf_gpu || cfg.write_buf_gpu){
+        cudaSetDevice(1);
+    }
 
     /* command-line arguments */
     while ((i = getopt (argc, argv, "vkur:s:o:i:jmqf:ha:x:g:y:pt:")) != EOF)
