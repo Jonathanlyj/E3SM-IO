@@ -114,8 +114,7 @@ void check_memory_type(void *ptr, const char *name) {
 }
 
 #define FIX_VAR_IPUT(varp, dp, itype, buf) {                                  \
-/* printf("FIX varp.vid=%d ndims=%d dp=%d nreqs=%d itype=%d name=%s\n",varp.vid,varp.ndims,dp, decom.contig_nreqs[dp],itype,varp._name); */ \
-    check_memory_type(buf, "buf_in_FIX_VAR_IPUT");                                       \
+/* printf("FIX varp.vid=%d ndims=%d dp=%d nreqs=%d itype=%d name=%s\n",varp.vid,varp.ndims,dp, decom.contig_nreqs[dp],itype,varp._name); */  \
     if (((cfg.strategy == canonical) || (cfg.strategy == log))) {             \
         err = driver.put_varn(ncid, varp.vid, itype, decom.contig_nreqs[dp],  \
                               decom.w_startx[dp], decom.w_countx[dp], buf,nb);\
@@ -172,6 +171,7 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
     int    *fix_int_buf_ptr, *rec_int_buf_ptr;
     float  *fix_flt_buf_ptr, *rec_flt_buf_ptr;
     double *fix_dbl_buf_ptr, *rec_dbl_buf_ptr, timing;
+    double write_start, write_time;
     MPI_Offset previous_size, metadata_size, total_size;
     MPI_Comm comm;
 
@@ -272,7 +272,8 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
 
     MPI_Barrier(comm); /*----------------------------------------------------*/
     timing = MPI_Wtime();
-
+    write_start = MPI_Wtime();
+    //META: 
     my_nreqs = 0; /* number of noncontiguous requests written by this rank */
 
 #ifdef ENABLE_ADIOS2
@@ -471,13 +472,13 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
 
             WAIT_ALL_REQS
             cmeta->flush_time += MPI_Wtime() - timing;
-
             if ((rec_no + 1) < cmeta->nrecs) timing = MPI_Wtime();
         }
     }
 
     MPI_Barrier(comm); /*----------------------------------------------------*/
     timing = MPI_Wtime();
+    if (sub_rank == 0)printf("rank=%d write_time=%.3f\n", sub_rank, MPI_Wtime() - write_start);
 
     /* close file */
     FILE_CLOSE

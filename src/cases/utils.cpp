@@ -195,7 +195,7 @@ int e3sm_io_case::wr_buf_malloc(e3sm_io_config &cfg, int ffreq)
     // printf("rank %d: cfg.write_buf_gpu: %d\n", rank, cfg.write_buf_gpu);
     
     if (cfg.write_buf_gpu) {
-        printf("rank %d: write_buf_gpu is called\n", rank);
+        // printf("rank %d: write_buf_gpu is called\n", rank);
         char *d_fix_txt_buf, *d_rec_txt_buf;
         int *d_fix_int_buf, *d_rec_int_buf;
         float *d_fix_flt_buf, *d_rec_flt_buf;
@@ -291,7 +291,7 @@ int e3sm_io_case::wr_buf_malloc(e3sm_io_config &cfg, int ffreq)
     }
 
 
-    printf("\nwr_buf.fix_txt_buf in e3sm: %p", wr_buf.fix_txt_buf);
+    // printf("\nwr_buf.fix_txt_buf in e3sm: %p", wr_buf.fix_txt_buf);
     return 0;
 }
 
