@@ -261,7 +261,8 @@ int main (int argc, char **argv) {
     cfg.sort_reqs      = 1;
     cfg.isReqSorted    = 0;
     //turn on gpu device buffer as write buffer
-    cfg.write_buf_gpu  = 1;
+    cfg.write_buf_gpu  = 0; // write buffer initialized on gpu
+    cfg.write_buf_offload  = 0; //offload write buffer to cpu by e3sm, effective only when write_buf_gpu is on
 
     for (i = 0; i < MAX_NUM_DECOMP; i++) {
         cfg.G_case.nvars_D[i]    = 0;
@@ -288,7 +289,7 @@ int main (int argc, char **argv) {
     }
 
     /* command-line arguments */
-    while ((i = getopt (argc, argv, "vkur:s:o:i:jmqf:ha:x:g:y:pt:")) != EOF)
+    while ((i = getopt (argc, argv, "vkur:s:o:i:jmqf:ha:x:g:y:pt:wd")) != EOF)
         switch (i) {
             case 'v':
                 cfg.verbose = 1;
@@ -391,6 +392,12 @@ int main (int argc, char **argv) {
                     cfg.filter = deflate;
                 else
                     ERR_OUT("Unknown filter")
+                break;
+            case 'w':
+                cfg.write_buf_gpu = 1;
+                break;
+            case 'd':
+                cfg.write_buf_offload = 1;
                 break;
             case 'h':
             default:

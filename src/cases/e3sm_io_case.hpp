@@ -142,6 +142,8 @@ class e3sm_io_case {
 
         int wr_buf_malloc(e3sm_io_config &cfg,
                           int ffreq);
+        int wr_buf_offload(e3sm_io_config &cfg,
+                          int ffreq);
 
         void wr_buf_free(e3sm_io_config &cfg);
 

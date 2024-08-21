@@ -171,7 +171,7 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
     int    *fix_int_buf_ptr, *rec_int_buf_ptr;
     float  *fix_flt_buf_ptr, *rec_flt_buf_ptr;
     double *fix_dbl_buf_ptr, *rec_dbl_buf_ptr, timing;
-    double write_start, write_time;
+    double  total_start, write_time, offload_time;
     MPI_Offset previous_size, metadata_size, total_size;
     MPI_Comm comm;
 
@@ -264,6 +264,7 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
 
     wr_buf_malloc(cfg, cmeta->ffreq);
 
+
     nvars_D = cmeta->nvars_D;
     for (j=0; j<decom.num_decomp; j++)
         nvars_D[j] = 0; /* number of variables using decomposition j */
@@ -271,10 +272,15 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
     cmeta->pre_time = MPI_Wtime() - timing;
 
     MPI_Barrier(comm); /*----------------------------------------------------*/
-    timing = MPI_Wtime();
-    write_start = MPI_Wtime();
+    timing = total_start = MPI_Wtime();
     //META: 
     my_nreqs = 0; /* number of noncontiguous requests written by this rank */
+
+    if (cfg.write_buf_gpu && cfg.write_buf_offload){
+        wr_buf_offload(cfg, cmeta->ffreq);
+    }
+    offload_time = MPI_Wtime() - total_start;
+
 
 #ifdef ENABLE_ADIOS2
     /* write decomposition maps */
@@ -478,7 +484,8 @@ int e3sm_io_case::var_wr_case(e3sm_io_config &cfg,
 
     MPI_Barrier(comm); /*----------------------------------------------------*/
     timing = MPI_Wtime();
-    if (sub_rank == 0)printf("rank=%d write_time=%.3f\n", sub_rank, MPI_Wtime() - write_start);
+    if (sub_rank == 0)printf("E3SM: rank=%d total_time=%.4f offload_time=%.4f\n", sub_rank, MPI_Wtime() - total_start, offload_time);
+
 
     /* close file */
     FILE_CLOSE
